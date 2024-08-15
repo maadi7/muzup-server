@@ -13,7 +13,11 @@ router.post('/form-sumbit', async (req, res) => {
       profilePic,
       topArtists,
       topTracks,
-      recentlyPlayed
+      recentlyPlayed,
+      followers,
+      followings,
+      pendingRequests,
+      requestedTo
     } = req.body;
 
     const Useremail = await User.findOne({email: email })
@@ -31,7 +35,11 @@ router.post('/form-sumbit', async (req, res) => {
       profilePic,
       topArtists,
       topTracks,
-      recentlyPlayed
+      recentlyPlayed,
+      followers,
+      followings,
+      pendingRequests,
+      requestedTo
     });
 
 

@@ -15,8 +15,6 @@ const io = new Server(server, { cors: { origin: 'http://localhost:3000' } }); //
 dotenv.config();
 
 
-
-
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
