@@ -12,7 +12,7 @@ const artistSchema = new mongoose.Schema({
   timestamps: true
 });
 
-const Artist = mongoose.model('Artist', artistSchema);
+
 
 // Album Schema
 const albumSchema = new mongoose.Schema({
@@ -41,7 +41,6 @@ const trackSchema = new mongoose.Schema({
   artists: [artist], // Array of Artist Schemas
 }, { _id: false });
 
-const Track = mongoose.model('Track', trackSchema);
 
 // Track Schema
 const recentlyPlayedSchema = new mongoose.Schema({
@@ -56,8 +55,6 @@ const recentlyPlayedSchema = new mongoose.Schema({
   album: albumSchema, // Embedded Album Schema
   artists: [artist], // Array of Artist Schemas
 }, { _id: false });
-
-const recentlyPlayed = mongoose.model('recentlyPlayed', recentlyPlayedSchema);
 
 
 const userSchema = new mongoose.Schema({
@@ -96,6 +93,12 @@ const userSchema = new mongoose.Schema({
   requestedTo: {
     type: Array,
     default: []
+  },
+  spotifyAccessToken:{
+    type: String
+  },
+  spotifyRefreshToken:{
+    type: String
   }
 }, {
   timestamps: true

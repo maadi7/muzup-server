@@ -7,6 +7,7 @@ const User = require('../models/User');
 router.post('/', async (req, res) => {
   try {
     const { userId, username, stories } = req.body;
+    console.log(req.body);
     let story = await Story.findOne({ userId });
     if (story) {
       story.stories.push(...stories);

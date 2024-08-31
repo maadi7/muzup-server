@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const Post = require("../models/Post");
 const User = require("../models/User");
+const mongoose = require("mongoose");
 
 // Create a post
 router.post("/", async (req, res) => {
@@ -69,6 +70,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+
 // Get timeline posts
 router.get("/timeline/:userId", async (req, res) => {
   try {
@@ -79,11 +81,16 @@ router.get("/timeline/:userId", async (req, res) => {
         return Post.find({ userId: friendId });
       })
     );
-    res.status(200).json(userPosts.concat(...friendPosts));
+    const timelinePosts = userPosts.concat(...friendPosts).sort((a, b) => {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    res.status(200).json(timelinePosts);
   } catch (error) {
     res.status(500).json(error);
   }
 });
+
 
 // Get all posts of a user
 router.get("/profile/:username", async (req, res) => {
@@ -96,6 +103,35 @@ router.get("/profile/:username", async (req, res) => {
   }
 });
 
+// Get comments of a Post with pagination
+router.get("/all/:postId", async (req, res) => {
+  try {
+    const postId = mongoose.Types.ObjectId(req.params.postId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 4;
+    const skip = (page - 1) * limit;
+
+    const post = await Post.findById(postId);
+    
+    if (!post) {
+      return res.status(404).json("Post Doesn't Exist");
+    }
+
+    const totalComments = post.comments.length;
+    const comments = post.comments.slice(skip, skip + limit);
+
+    res.status(200).json({
+      comments,
+      currentPage: page,
+      totalPages: Math.ceil(totalComments / limit),
+      hasMore: skip + limit < totalComments
+    });
+  } catch (error) {
+    res.status(500).json(error);
+  }
+});
+
+
 // Add a comment to a post
 router.post("/:id/comment", async (req, res) => {
   try {
@@ -103,18 +139,21 @@ router.post("/:id/comment", async (req, res) => {
     if (!post) {
       return res.status(404).json("Post not found");
     }
-
+    const { id, name, text } = req.body;
+    const userId = mongoose.Types.ObjectId(id);
+    console.log(userId);
     const comment = {
-      id: req.body.userId,  
-      name: req.body.name,  
-      text: req.body.text,
+      id: userId,  
+      name: name,  
+      text: text,
     };
 
     post.comments.push(comment);
 
     const updatedPost = await post.save();
-    res.status(200).json(updatedPost);
+    res.status(200).json(updatedPost.comments[updatedPost.comments.length-1]);
   } catch (error) {
+    console.log(error);
     res.status(500).json(error);
   }
 });
@@ -126,25 +165,16 @@ router.delete("/:postId/comment/:commentId", async (req, res) => {
     if (!post) {
       return res.status(404).json("Post not found");
     }
-
-    // Find the comment index
     const commentIndex = post.comments.findIndex(
       (comment) => comment._id.toString() === req.params.commentId
     );
-
     if (commentIndex === -1) {
       return res.status(404).json("Comment not found");
     }
-
-    // Check if the user requesting the delete owns the comment
     if (post.comments[commentIndex].id.toString() !== req.body.userId) {
       return res.status(403).json("You can only delete your own comment");
     }
-
-    // Remove the comment
     post.comments.splice(commentIndex, 1);
-
-    // Save the post after the comment has been removed
     await post.save();
 
     res.status(200).json("Comment has been deleted");
