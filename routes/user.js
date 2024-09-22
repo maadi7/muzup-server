@@ -92,55 +92,163 @@ router.get("/friends/:userId", async (req, res)=>{
     }
 })
 
-// follow a user
-router.put("/:id/follow", async (req, res) =>{
-    if(req.params.id !== req.body.userId){
-
-        try {
-            const user = await User.findById(req.params.id);
-            const currentUser = await User.findById(req.body.userId); 
-            if(!user.followers.includes(req.body.userId)){
-               await user.updateOne({$push:{followers:req.body.userId}});
-               await currentUser.updateOne({$push:{followings:req.params.id}});
-               res.status(200).json("Now you follow this user");
-
-            }else{
-                res.status(403).json("you Already follow this user");
-            }
-            
-        } catch (error) {
-            res.status(500).json(error);
-
-        }
-        
-    }else{
-        res.status(403).json("You cant follow yourself");
-    }
-})
-
-// unfollow a user
-router.put("/:id/unfollow", async (req, res) =>{
+// Follow or request to follow a user
+router.put("/:id/follow", async (req, res) => {
     if(req.params.id !== req.body.userId){
         try {
             const user = await User.findById(req.params.id);
-            const currentUser = await User.findById(req.body.userId); 
-            if(user.followers.includes(req.body.userId)){
-               await user.updateOne({$pull:{followers:req.body.userId}});
-               await currentUser.updateOne({$pull:{followings:req.params.id}});
-               res.status(200).json("Now you unfollow this user");
+            const currentUser = await User.findById(req.body.userId);
 
-            }else{
-                res.status(403).json("you dont follow this account");
+            // Check if the user is blocked by the current user
+            if(currentUser.blockedByMe.includes(req.params.id)){
+                return res.status(403).json("You cannot follow a user you have blocked");
             }
             
+            if(!user.followers.includes(req.body.userId) && !user.pendingRequests.includes(req.body.userId)){
+                if(user.isPrivate){
+                    // If the account is private, add to pending requests
+                    await user.updateOne({$push:{pendingRequests:req.body.userId}});
+                    await currentUser.updateOne({$push:{requestedTo:req.params.id}});
+                    res.status(200).json("Follow request sent");
+                } else {
+                    // If the account is public, follow directly
+                    await user.updateOne({$push:{followers:req.body.userId}});
+                    await currentUser.updateOne({$push:{followings:req.params.id}});
+                    res.status(200).json("User followed successfully");
+                }
+            } else {
+                res.status(403).json("You already follow or have a pending request for this user");
+            }
         } catch (error) {
             res.status(500).json(error);
-
         }
-        
-    }else{
-        res.status(403).json("You cant unfollow/follow yourself")
+    } else {
+        res.status(403).json("You can't follow yourself");
     }
 });
+
+
+// Unfollow a user or cancel follow request
+router.put("/:id/unfollow", async (req, res) => {
+    if(req.params.id !== req.body.userId){
+        try {
+            const user = await User.findById(req.params.id);
+            const currentUser = await User.findById(req.body.userId);
+            
+            // Check if the user is blocked by the current user
+            if(currentUser.blockedByMe.includes(req.params.id)){
+                return res.status(403).json("You cannot unfollow a user you have blocked");
+            }
+
+            if(user.followers.includes(req.body.userId)){
+                // Unfollow
+                await user.updateOne({$pull:{followers:req.body.userId}});
+                await currentUser.updateOne({$pull:{followings:req.params.id}});
+                res.status(200).json("User unfollowed successfully");
+            } else if(user.pendingRequests.includes(req.body.userId)){
+                // Cancel follow request
+                await user.updateOne({$pull:{pendingRequests:req.body.userId}});
+                await currentUser.updateOne({$pull:{requestedTo:req.params.id}});
+                res.status(200).json("Follow request cancelled");
+            } else {
+                res.status(403).json("You don't follow or have a pending request for this user");
+            }
+        } catch (error) {
+            res.status(500).json(error);
+        }
+    } else {
+        res.status(403).json("You can't unfollow yourself");
+    }
+});
+
+
+// Accept a follow request
+router.put("/:id/accept-request", async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        const requester = await User.findById(req.body.requesterId);
+        
+        if(user.pendingRequests.includes(req.body.requesterId)){
+            await user.updateOne({
+                $pull: {pendingRequests: req.body.requesterId},
+                $push: {followers: req.body.requesterId}
+            });
+            await requester.updateOne({
+                $pull: {requestedTo: req.params.id},
+                $push: {followings: req.params.id}
+            });
+            res.status(200).json("Follow request accepted");
+        } else {
+            res.status(403).json("No such pending request");
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+});
+
+// Reject a follow request
+router.put("/:id/reject-request", async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        const requester = await User.findById(req.body.requesterId);
+        
+        if(user.pendingRequests.includes(req.body.requesterId)){
+            await user.updateOne({$pull: {pendingRequests: req.body.requesterId}});
+            await requester.updateOne({$pull: {requestedTo: req.params.id}});
+            res.status(200).json("Follow request rejected");
+        } else {
+            res.status(403).json("No such pending request");
+        }
+    } catch (error) {
+        res.status(500).json(error);
+    }
+});
+
+router.put("/:id/block", async (req, res) => {
+    if (req.params.id !== req.body.userId) {
+        try {
+            const user = await User.findById(req.params.id);
+            const currentUser = await User.findById(req.body.userId);
+
+            if (!currentUser.blockedByMe.includes(req.params.id)) {
+                // Add the user to the blockedByMe array
+                await currentUser.updateOne({ $push: { blockedByMe: req.params.id } });
+                // Optionally, you can unfollow the user if they are currently followed
+                await currentUser.updateOne({ $pull: { followings: req.params.id } });
+                await user.updateOne({ $pull: { followers: req.body.userId } });
+
+                res.status(200).json("User blocked successfully");
+            } else {
+                res.status(403).json("User is already blocked");
+            }
+        } catch (error) {
+            res.status(500).json(error);
+        }
+    } else {
+        res.status(403).json("You can't block yourself");
+    }
+});
+
+router.put("/:id/unblock", async (req, res) => {
+    if (req.params.id !== req.body.userId) {
+        try {
+            const currentUser = await User.findById(req.body.userId);
+
+            if (currentUser.blockedByMe.includes(req.params.id)) {
+                // Remove the user from the blockedByMe array
+                await currentUser.updateOne({ $pull: { blockedByMe: req.params.id } });
+                res.status(200).json("User unblocked successfully");
+            } else {
+                res.status(403).json("User is not blocked");
+            }
+        } catch (error) {
+            res.status(500).json(error);
+        }
+    } else {
+        res.status(403).json("You can't unblock yourself");
+    }
+});
+
+
 
 module.exports = router;

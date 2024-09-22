@@ -94,6 +94,18 @@ const userSchema = new mongoose.Schema({
     type: Array,
     default: []
   },
+  blockedByMe:{
+    type:Array,
+    default:[]
+  },
+  isPrivate:{
+    type: Boolean,
+    default: true
+  },
+  bio: {
+    type: String,
+    required: false
+  },
   spotifyAccessToken:{
     type: String
   },
