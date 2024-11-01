@@ -82,16 +82,38 @@ io.on("connection", (socket) => {
   });
 
   // Send and get message
-  socket.on("sendMessage", ({ senderId, receiverId, text }) => {
+  socket.on("sendMessage", ({ senderId, receiverId, text, conversationId }) => {
     const user = getUser(receiverId);
-    console.log(user);
     if (user) {
-      io.to(user.socketId).emit("getMessage", { senderId, text });
+      io.to(user.socketId).emit("getMessage", { senderId, text, conversationId });
       console.log(`Message sent to ${receiverId}: ${text}`);
     } else {
       console.log(`User ${receiverId} not found`);
     }
   });
+
+  socket.on("typing", ({ senderId, receiverId, conversationId }) => {
+    const user = getUser(receiverId);
+    if (user) {
+      io.to(user.socketId).emit("userTyping", { senderId, conversationId });
+    }
+  });
+
+  socket.on("stopTyping", ({ senderId, receiverId, conversationId }) => {
+    const user = getUser(receiverId);
+    if (user) {
+      io.to(user.socketId).emit("userStoppedTyping", { senderId, conversationId });
+    }
+  });
+
+  // Handle message seen status
+  socket.on("messageSeen", ({ senderId, receiverId, conversationId, messageId }) => {
+    const user = getUser(senderId);
+    if (user) {
+      io.to(user.socketId).emit("messageSeenUpdate", { receiverId, conversationId, messageId });
+    }
+  });
+
 
   // On user disconnection
   socket.on("disconnect", () => {
