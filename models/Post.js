@@ -13,6 +13,10 @@ const replySchema = new mongoose.Schema({
     replyingTo:{
         id: String,
     },
+    replyToId: {
+        type: mongoose.Schema.Types.ObjectId,
+        // This can be null if replying to the main comment
+      },
     name: {
         type: String
     },

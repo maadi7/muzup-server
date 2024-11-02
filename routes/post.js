@@ -132,7 +132,7 @@ router.get("/all/:postId", async (req, res) => {
   }
 });
 
-
+//add a comment
 router.post("/:id/comment", async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -202,32 +202,48 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
     }
 
     const comment = post.comments.id(req.params.commentId);
+    
     if (!comment) {
       return res.status(404).json("Comment not found");
     }
 
-    const { userId, name, text, id } = req.body;
+    const { userId, name, text, replyToId } = req.body;
+    
+    // Generate a new unique ID for this reply
+    const replyId = new mongoose.Types.ObjectId();
     
     const reply = {
+      _id: replyId,
       userId: mongoose.Types.ObjectId(userId),
-      parentComment:req.params.commentId,
-      replyingTo: id,
+      parentComment: req.params.commentId,
+      replyToId: replyToId, // ID of the comment/reply this is responding to
       name: name,
       text: text,
       likes: []
     };
 
-    // Add reply to the comment
+    // Initialize replies array if it doesn't exist
     if (!comment.replies) {
       comment.replies = [];
     }
-    comment.replies.push(reply);
+
+    // Find the index of the comment we're replying to
+    const replyToIndex = comment.replies.findIndex(r => r._id.toString() === replyToId);
+    
+    if (replyToIndex !== -1) {
+      // Insert right after the reply we're responding to
+      comment.replies.splice(replyToIndex + 1, 0, reply);
+    } else {
+      // If replying to the main comment or reply not found, add to the end
+      comment.replies.push(reply);
+    }
 
     const updatedPost = await post.save();
     const updatedComment = updatedPost.comments.id(req.params.commentId);
     
     // Return the newly added reply
-    res.status(200).json(updatedComment.replies[updatedComment.replies.length - 1]);
+    const newReply = updatedComment.replies.find(r => r._id.toString() === replyId.toString());
+    res.status(200).json(newReply);
   } catch (error) {
     console.log(error);
     res.status(500).json(error);
@@ -303,55 +319,6 @@ router.put("/:postId/comment/:commentId/reply/:replyId/like", async (req, res) =
   }
 });
 
-
-//add a reply to a comment reply 
-router.post("/:postId/comment/:commentId/reply/:replyId/like", async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) {
-      return res.status(404).json("Post not found");
-    }
-
-    const comment = post.comments.id(req.params.commentId);
-    if (!comment) {
-      return res.status(404).json("Comment not found");
-    }
-
-    const reply = comment.replies.id(req.params.replyId);
-    if (!reply) {
-      return res.status(404).json("Reply not found");
-    }
-
-    const { userId, name, text } = req.body;
-    
-    const replyToReply = {
-      userId: mongoose.Types.ObjectId(userId),
-      parentComment:req.params.commentId,
-      name: name,
-      text: text,
-      likes: []
-    };
-
-    // Add reply to the comment
-    if (!comment.replies) {
-      comment.replies = [];
-    }
-    comment.replies.push(reply);
-
-    const updatedPost = await post.save();
-    const updatedComment = updatedPost.comments.id(req.params.commentId);
-    
-    // Return the newly added reply
-    res.status(200).json(updatedComment.replies[updatedComment.replies.length - 1]);
-
-    
-  } catch (error) {
-    console.log(error);
-    res.status(500).json(error);
-  }
-})
-
-
 // Get replies for a comment with pagination
 router.get("/:postId/comment/:commentId/replies", async (req, res) => {
   try {
@@ -378,6 +345,37 @@ router.get("/:postId/comment/:commentId/replies", async (req, res) => {
       totalPages: Math.ceil(totalReplies / limit),
       hasMore: skip + limit < totalReplies
     });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json(error);
+  }
+});
+
+router.put("/:postId/comment/:commentId/like", async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.postId);
+    if (!post) {
+      return res.status(404).json("Post not found");
+    }
+
+    const comment = post.comments.id(req.params.commentId);
+    if (!comment) {
+      return res.status(404).json("Comment not found");
+    }
+
+    let likes = comment.likes;
+
+    if (!likes.includes(req.body.userId)) {
+      // Like the reply
+      likes.push(req.body.userId);
+      await post.save();
+      res.status(200).json("Reply has been liked");
+    } else {
+      // Unlike the reply
+      likes = likes.filter(id => id !== req.body.userId);
+      await post.save();
+      res.status(200).json("Reply has been unliked");
+    }
   } catch (error) {
     console.log(error);
     res.status(500).json(error);
