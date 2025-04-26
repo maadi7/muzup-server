@@ -70,15 +70,16 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-
 // Get timeline posts
 router.get("/timeline/:userId", async (req, res) => {
   try {
     const currentUser = await User.findById(req.params.userId);
-    const userPosts = await Post.find({ userId: currentUser._id }).sort({createdAt: -1});
+    const userPosts = await Post.find({ userId: currentUser._id }).sort({
+      createdAt: -1,
+    });
     const friendPosts = await Promise.all(
       currentUser.followings.map((friendId) => {
-        return Post.find({ userId: friendId }).sort({createdAt: -1})
+        return Post.find({ userId: friendId }).sort({ createdAt: -1 });
       })
     );
     // let response = [...userPosts, ...friendPosts]
@@ -91,7 +92,6 @@ router.get("/timeline/:userId", async (req, res) => {
     res.status(500).json(error);
   }
 });
-
 
 // Get all posts of a user
 router.get("/profile/:username", async (req, res) => {
@@ -113,7 +113,7 @@ router.get("/all/:postId", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const post = await Post.findById(postId);
-    
+
     if (!post) {
       return res.status(404).json("Post Doesn't Exist");
     }
@@ -125,7 +125,7 @@ router.get("/all/:postId", async (req, res) => {
       comments,
       currentPage: page,
       totalPages: Math.ceil(totalComments / limit),
-      hasMore: skip + limit < totalComments
+      hasMore: skip + limit < totalComments,
     });
   } catch (error) {
     res.status(500).json(error);
@@ -139,17 +139,17 @@ router.post("/:id/comment", async (req, res) => {
     if (!post) {
       return res.status(404).json("Post not found");
     }
-    
+
     // Extract data from request body
     const { id, name, text } = req.body;
-    
+
     // Create comment object with correct field name (userId instead of id)
     const comment = {
       userId: mongoose.Types.ObjectId(id), // Convert id to userId
       name: name,
       text: text,
       likes: [],
-      replies: []
+      replies: [],
     };
 
     // Add comment to post
@@ -157,15 +157,15 @@ router.post("/:id/comment", async (req, res) => {
 
     // Save the updated post
     const updatedPost = await post.save();
-    
+
     // Return the newly added comment
-    res.status(200).json(updatedPost.comments[updatedPost.comments.length-1]);
+    console.log(updatedPost);
+    res.status(200).json(updatedPost.comments[updatedPost.comments.length - 1]);
   } catch (error) {
     console.log(error);
     res.status(500).json(error);
   }
 });
-
 
 // Delete a comment from a post
 router.delete("/:postId/comment/:commentId", async (req, res) => {
@@ -192,7 +192,6 @@ router.delete("/:postId/comment/:commentId", async (req, res) => {
   }
 });
 
-
 // Add a reply to a comment
 router.post("/:postId/comment/:commentId/reply", async (req, res) => {
   try {
@@ -202,16 +201,16 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
     }
 
     const comment = post.comments.id(req.params.commentId);
-    
+
     if (!comment) {
       return res.status(404).json("Comment not found");
     }
 
     const { userId, name, text, replyToId } = req.body;
-    
+
     // Generate a new unique ID for this reply
     const replyId = new mongoose.Types.ObjectId();
-    
+
     const reply = {
       _id: replyId,
       userId: mongoose.Types.ObjectId(userId),
@@ -219,7 +218,7 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
       replyToId: replyToId, // ID of the comment/reply this is responding to
       name: name,
       text: text,
-      likes: []
+      likes: [],
     };
 
     // Initialize replies array if it doesn't exist
@@ -228,8 +227,10 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
     }
 
     // Find the index of the comment we're replying to
-    const replyToIndex = comment.replies.findIndex(r => r._id.toString() === replyToId);
-    
+    const replyToIndex = comment.replies.findIndex(
+      (r) => r._id.toString() === replyToId
+    );
+
     if (replyToIndex !== -1) {
       // Insert right after the reply we're responding to
       comment.replies.splice(replyToIndex + 1, 0, reply);
@@ -240,9 +241,11 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
 
     const updatedPost = await post.save();
     const updatedComment = updatedPost.comments.id(req.params.commentId);
-    
+
     // Return the newly added reply
-    const newReply = updatedComment.replies.find(r => r._id.toString() === replyId.toString());
+    const newReply = updatedComment.replies.find(
+      (r) => r._id.toString() === replyId.toString()
+    );
     res.status(200).json(newReply);
   } catch (error) {
     console.log(error);
@@ -251,73 +254,79 @@ router.post("/:postId/comment/:commentId/reply", async (req, res) => {
 });
 
 // Delete a reply from a comment
-router.delete("/:postId/comment/:commentId/reply/:replyId", async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) {
-      return res.status(404).json("Post not found");
+router.delete(
+  "/:postId/comment/:commentId/reply/:replyId",
+  async (req, res) => {
+    try {
+      const post = await Post.findById(req.params.postId);
+      if (!post) {
+        return res.status(404).json("Post not found");
+      }
+
+      const comment = post.comments.id(req.params.commentId);
+      if (!comment) {
+        return res.status(404).json("Comment not found");
+      }
+
+      const reply = comment.replies.id(req.params.replyId);
+      if (!reply) {
+        return res.status(404).json("Reply not found");
+      }
+
+      // Check if the user is authorized to delete the reply
+      if (reply.userId.toString() !== req.body.userId) {
+        return res.status(403).json("You can only delete your own reply");
+      }
+
+      // Remove the reply
+      comment.replies.pull(reply._id);
+      await post.save();
+
+      res.status(200).json("Reply has been deleted");
+    } catch (error) {
+      console.log(error);
+      res.status(500).json(error);
     }
-
-    const comment = post.comments.id(req.params.commentId);
-    if (!comment) {
-      return res.status(404).json("Comment not found");
-    }
-
-    const reply = comment.replies.id(req.params.replyId);
-    if (!reply) {
-      return res.status(404).json("Reply not found");
-    }
-
-    // Check if the user is authorized to delete the reply
-    if (reply.userId.toString() !== req.body.userId) {
-      return res.status(403).json("You can only delete your own reply");
-    }
-
-    // Remove the reply
-    comment.replies.pull(reply._id);
-    await post.save();
-
-    res.status(200).json("Reply has been deleted");
-  } catch (error) {
-    console.log(error);
-    res.status(500).json(error);
   }
-});
+);
 
 // Like/Unlike a reply
-router.put("/:postId/comment/:commentId/reply/:replyId/like", async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) {
-      return res.status(404).json("Post not found");
-    }
+router.put(
+  "/:postId/comment/:commentId/reply/:replyId/like",
+  async (req, res) => {
+    try {
+      const post = await Post.findById(req.params.postId);
+      if (!post) {
+        return res.status(404).json("Post not found");
+      }
 
-    const comment = post.comments.id(req.params.commentId);
-    if (!comment) {
-      return res.status(404).json("Comment not found");
-    }
+      const comment = post.comments.id(req.params.commentId);
+      if (!comment) {
+        return res.status(404).json("Comment not found");
+      }
 
-    const reply = comment.replies.id(req.params.replyId);
-    if (!reply) {
-      return res.status(404).json("Reply not found");
-    }
+      const reply = comment.replies.id(req.params.replyId);
+      if (!reply) {
+        return res.status(404).json("Reply not found");
+      }
 
-    if (!reply.likes.includes(req.body.userId)) {
-      // Like the reply
-      reply.likes.push(req.body.userId);
-      await post.save();
-      res.status(200).json("Reply has been liked");
-    } else {
-      // Unlike the reply
-      reply.likes = reply.likes.filter(id => id !== req.body.userId);
-      await post.save();
-      res.status(200).json("Reply has been unliked");
+      if (!reply.likes.includes(req.body.userId)) {
+        // Like the reply
+        reply.likes.push(req.body.userId);
+        await post.save();
+        res.status(200).json("Reply has been liked");
+      } else {
+        // Unlike the reply
+        reply.likes = reply.likes.filter((id) => id !== req.body.userId);
+        await post.save();
+        res.status(200).json("Reply has been unliked");
+      }
+    } catch (error) {
+      console.log(error);
+      res.status(500).json(error);
     }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json(error);
   }
-});
+);
 
 // Get replies for a comment with pagination
 router.get("/:postId/comment/:commentId/replies", async (req, res) => {
@@ -343,7 +352,7 @@ router.get("/:postId/comment/:commentId/replies", async (req, res) => {
       replies,
       currentPage: page,
       totalPages: Math.ceil(totalReplies / limit),
-      hasMore: skip + limit < totalReplies
+      hasMore: skip + limit < totalReplies,
     });
   } catch (error) {
     console.log(error);
@@ -372,7 +381,7 @@ router.put("/:postId/comment/:commentId/like", async (req, res) => {
       res.status(200).json("Reply has been liked");
     } else {
       // Unlike the reply
-      likes = likes.filter(id => id !== req.body.userId);
+      likes = likes.filter((id) => id !== req.body.userId);
       await post.save();
       res.status(200).json("Reply has been unliked");
     }
@@ -383,4 +392,3 @@ router.put("/:postId/comment/:commentId/like", async (req, res) => {
 });
 
 module.exports = router;
-
