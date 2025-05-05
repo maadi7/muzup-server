@@ -50,7 +50,7 @@ router.get("/unread/:userId", async (req, res) => {
     const userId = req.params.userId;
 
     // Try Redis first
-    let count;
+    let count = null;
     count = await redisHelpers.getUnreadNotificationCount(userId);
     if (count !== null) {
       return res.status(200).json({ count });

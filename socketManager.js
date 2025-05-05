@@ -216,6 +216,7 @@ class SocketManager {
 
   async createNotification(notificationData) {
     try {
+      console.log(notificationData);
       const notification = new Notification(notificationData);
       await notification.save();
 
